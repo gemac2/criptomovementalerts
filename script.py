@@ -80,34 +80,70 @@ def evaluar_porcentajes(symbol, klines, info_24h):
     if not klines or len(klines) < 30:
         return
 
-    # Precios para 30 min (velas de 1m)
-    p_inicial_30m = float(klines[0][4]) # Close de hace 30 min
-    p_final = float(klines[-1][4])      # Close actual
-    
-    # Precios para Fast (2 min)
-    p_inicial_2m = float(klines[-3][4]) # Close de hace 2 min
+    # Extraer el array de precios de cierre (close), mínimos (low) y máximos (high)
+    closes = [float(kline[4]) for kline in klines]
+    lows = [float(kline[3]) for kline in klines]
+    highs = [float(kline[2]) for kline in klines]
+
+    p_inicial_30m = closes[0] 
+    p_final = closes[-1]      
+    p_inicial_2m = closes[-3] 
 
     qvol = float(info_24h.get('quoteVolume', 0))
     var_30m = ((p_final - p_inicial_30m) / p_inicial_30m) * 100
     var_2m = ((p_final - p_inicial_2m) / p_inicial_2m) * 100
 
     msg = ""
+    es_pump = False
     
     # Lógica SHORT / LONG 30m
     abs_var_30m = abs(var_30m)
     umbral = VARIACION_30M if qvol > MIN_QUOTE_VOL else VARIACION_30M_LOWVOL
     
     if abs_var_30m >= umbral:
-        tipo = "🚀 *PUMP (SHORT)*" if var_30m > 0 else "🔥 *DUMP (LONG)*"
+        tipo = "🚀 *PUMP DETECTADO*" if var_30m > 0 else "🔥 *DUMP DETECTADO*"
         msg += f"{tipo}\nSímbolo: #{symbol}\nVar 30m: {var_30m:.2f}%\n"
+        es_pump = var_30m > 0
 
     # Lógica FAST 2m
     if abs(var_2m) >= VARIACION_FAST_2M:
-        msg += f"⚡ *MOVIMIENTO RÁPIDO*\nSímbolo: #{symbol}\nVar 2m: {var_2m:.2f}%\n"
+        tipo_rapido = "🚀 *PUMP RÁPIDO*" if var_2m > 0 else "🔥 *DUMP RÁPIDO*"
+        msg += f"⚡ {tipo_rapido}\nSímbolo: #{symbol}\nVar 2m: {var_2m:.2f}%\n"
+        es_pump = var_2m > 0
 
     if msg:
-        msg += f"Vol 24h: ${human_format(qvol)}\nPrecio: {p_final}"
-        print(msg) # Log en terminal
+        # --- CÁLCULO DE FIBONACCI ---
+        # Buscamos el mínimo y máximo de las últimas 30 velas para medir el impulso
+        min_precio = min(lows)
+        max_precio = max(highs)
+        impulso = max_precio - min_precio
+
+        if es_pump:
+            # Si es Pump, calculamos los retrocesos hacia abajo desde el máximo
+            fib_382 = max_precio - (impulso * 0.382)
+            fib_500 = max_precio - (impulso * 0.500)
+            fib_618 = max_precio - (impulso * 0.618)
+            
+            msg += f"\n🎯 *ZONAS DE PULLBACK (LONG)*\n"
+            msg += f"Entrada 1 (38.2%): `{fib_382:.5f}`\n"
+            msg += f"Entrada 2 (50.0%): `{fib_500:.5f}`\n"
+            msg += f"🚫 Stop Loss (<61.8%): `{fib_618:.5f}`\n"
+        else:
+            # Si es Dump, calculamos los retrocesos hacia arriba desde el mínimo (para Short)
+            fib_382 = min_precio + (impulso * 0.382)
+            fib_500 = min_precio + (impulso * 0.500)
+            fib_618 = min_precio + (impulso * 0.618)
+            
+            msg += f"\n🎯 *ZONAS DE PULLBACK (SHORT)*\n"
+            msg += f"Entrada 1 (38.2%): `{fib_382:.5f}`\n"
+            msg += f"Entrada 2 (50.0%): `{fib_500:.5f}`\n"
+            msg += f"🚫 Stop Loss (>61.8%): `{fib_618:.5f}`\n"
+
+        msg += f"\n💰 Vol 24h: ${human_format(qvol)}\n"
+        msg += f"💵 Precio actual: {p_final}\n"
+        msg += f"🔗 [Gráfica en Binance](https://www.binance.com/en/futures/{symbol})"
+        
+        print(msg) 
         send_telegram_alert(msg)
 
 def ciclo():
