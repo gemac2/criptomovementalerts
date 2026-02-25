@@ -118,6 +118,11 @@ def evaluar_porcentajes(symbol, klines, info_24h):
         max_precio = max(highs)
         impulso = max_precio - min_precio
 
+        msg += f"\n📏 *ANCLAJES DE FIBONACCI*\n"
+        msg += f"Swing Low (Mínimo): `{min_precio:.5f}`\n"
+        msg += f"Swing High (Máximo): `{max_precio:.5f}`\n"
+        msg += f"Tamaño del impulso: `{impulso:.5f}` USDT\n"
+
         if es_pump:
             # Si es Pump, calculamos los retrocesos hacia abajo desde el máximo
             fib_382 = max_precio - (impulso * 0.382)
