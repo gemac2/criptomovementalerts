@@ -137,8 +137,6 @@ def evaluar_porcentajes(symbol, klines, info_24h):
         return
 
     closes = [float(kline[4]) for kline in klines]
-    lows = [float(kline[3]) for kline in klines]
-    highs = [float(kline[2]) for kline in klines]
 
     p_inicial_30m = closes[0] 
     p_final = closes[-1]      
@@ -149,7 +147,6 @@ def evaluar_porcentajes(symbol, klines, info_24h):
     var_2m = ((p_final - p_inicial_2m) / p_inicial_2m) * 100
 
     msg = ""
-    es_pump = False
     
     # Lógica SHORT / LONG 30m
     abs_var_30m = abs(var_30m)
@@ -158,52 +155,22 @@ def evaluar_porcentajes(symbol, klines, info_24h):
     if abs_var_30m >= umbral:
         tipo = "🚀 *PUMP DETECTADO*" if var_30m > 0 else "🔥 *DUMP DETECTADO*"
         msg += f"{tipo}\nSímbolo: #{symbol}\nVar 30m: {var_30m:.2f}%\n"
-        es_pump = var_30m > 0
 
     # Lógica FAST 2m
     if abs(var_2m) >= VARIACION_FAST_2M:
         tipo_rapido = "🚀 *PUMP RÁPIDO*" if var_2m > 0 else "🔥 *DUMP RÁPIDO*"
         msg += f"⚡ {tipo_rapido}\nSímbolo: #{symbol}\nVar 2m: {var_2m:.2f}%\n"
-        es_pump = var_2m > 0
 
     if msg:
-        # 1. Registrar conteo estadístico en horario Venezuela
+        # Registrar conteo estadístico en horario Venezuela
         franja_actual = registrar_alerta_horaria()
 
-        # 2. Anclajes Fibonacci
-        min_precio = min(lows)
-        max_precio = max(highs)
-        impulso = max_precio - min_precio
-
-        msg += f"\n📏 *ANCLAJES DE FIBONACCI*\n"
-        msg += f"Swing Low (Mínimo): `{min_precio:.5f}`\n"
-        msg += f"Swing High (Máximo): `{max_precio:.5f}`\n"
-        msg += f"Tamaño del impulso: `{impulso:.5f}` USDT\n"
-
-        if es_pump:
-            fib_382 = max_precio - (impulso * 0.382)
-            fib_500 = max_precio - (impulso * 0.500)
-            fib_618 = max_precio - (impulso * 0.618)
-            
-            msg += f"\n🎯 *ZONAS DE PULLBACK (LONG)*\n"
-            msg += f"Entrada 1 (38.2%): `{fib_382:.5f}`\n"
-            msg += f"Entrada 2 (50.0%): `{fib_500:.5f}`\n"
-            msg += f"🚫 Stop Loss (<61.8%): `{fib_618:.5f}`\n"
-        else:
-            fib_382 = min_precio + (impulso * 0.382)
-            fib_500 = min_precio + (impulso * 0.500)
-            fib_618 = min_precio + (impulso * 0.618)
-            
-            msg += f"\n🎯 *ZONAS DE PULLBACK (SHORT)*\n"
-            msg += f"Entrada 1 (38.2%): `{fib_382:.5f}`\n"
-            msg += f"Entrada 2 (50.0%): `{fib_500:.5f}`\n"
-            msg += f"🚫 Stop Loss (>61.8%): `{fib_618:.5f}`\n"
-
+        # Datos de volumen, precio y enlace
         msg += f"\n💰 Vol 24h: ${human_format(qvol)}\n"
         msg += f"💵 Precio actual: {p_final}\n"
         msg += f"🔗 [Gráfica en Binance](https://www.binance.com/en/futures/{symbol})\n\n"
         
-        # 3. Adjuntar desglose estadístico al final del mensaje
+        # Desglose estadístico al final del mensaje
         msg += f"🕒 *Franja Alerta:* `{franja_actual}`\n"
         msg += "───────────────\n"
         msg += obtener_resumen_estadisticas()
