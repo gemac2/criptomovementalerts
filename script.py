@@ -32,6 +32,9 @@ REFRESH_SIMBOLOS_CADA = 600  # 10 min
 VET_TIMEZONE = ZoneInfo("America/Caracas")
 alert_stats = defaultdict(int)
 
+# Variable para evitar envíos duplicados en el mismo minuto de cierre
+_ultimo_reporte_enviado = ""
+
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 http = requests.Session()
 
@@ -75,11 +78,37 @@ def obtener_resumen_estadisticas() -> str:
         "12:00 AM - 04:00 AM",
         "04:00 AM - 08:00 AM",
     ]
-    texto = "📊 *ESTADÍSTICAS DE ALERTAS (VET)*\n"
+    texto = "📊 *REPORTE DE VOLATILIDAD - ESTADÍSTICAS (VET)*\n"
+    texto += "───────────────\n"
+    total_alertas = 0
     for slot in time_slots:
         count = alert_stats.get(slot, 0)
-        texto += f"• `{slot}`: *{count}*\n"
+        total_alertas += count
+        texto += f"• `{slot}`: *{count}* alertas\n"
+    texto += f"\n📈 *Total acumulado:* *{total_alertas}* alertas"
     return texto
+
+
+def verificar_envio_reporte_programado():
+    """
+    Verifica si falta 1 minuto para el cambio de franja horaria (ej: 03:59, 07:59, 11:59, 15:59, 19:59, 23:59 VET)
+    y envía el resumen por Telegram si aún no se ha enviado para esa marca de tiempo.
+    """
+    global _ultimo_reporte_enviado
+    
+    now_vet = datetime.now(VET_TIMEZONE)
+    # Lista de horas en las que se debe gatillar el reporte (las 3:59, 7:59, 11:59, 15:59, 19:59, 23:59)
+    horas_objetivo = [3, 7, 11, 15, 19, 23]
+    
+    if now_vet.hour in horas_objetivo and now_vet.minute == 59:
+        # Identificador único del minuto actual (ej: "2026-10-01-15:59")
+        clave_minuto = now_vet.strftime("%Y-%m-%d-%H:%M")
+        
+        if _ultimo_reporte_enviado != clave_minuto:
+            msg_reporte = obtener_resumen_estadisticas()
+            print(f"\n[PROGRAMADOR] Enviando reporte de cierre de bloque VET ({clave_minuto})...")
+            send_telegram_alert(msg_reporte)
+            _ultimo_reporte_enviado = clave_minuto
 
 
 # ====== Funciones del Bot y Red ======
@@ -162,18 +191,14 @@ def evaluar_porcentajes(symbol, klines, info_24h):
         msg += f"⚡ {tipo_rapido}\nSímbolo: #{symbol}\nVar 2m: {var_2m:.2f}%\n"
 
     if msg:
-        # Registrar conteo estadístico en horario Venezuela
+        # Incrementa el conteo interno silenciosamente sin adjuntar el bloque largo
         franja_actual = registrar_alerta_horaria()
 
-        # Datos de volumen, precio y enlace
+        # Alerta de mercado limpia e instantánea
         msg += f"\n💰 Vol 24h: ${human_format(qvol)}\n"
         msg += f"💵 Precio actual: {p_final}\n"
-        msg += f"🔗 [Gráfica en Binance](https://www.binance.com/en/futures/{symbol})\n\n"
-        
-        # Desglose estadístico al final del mensaje
-        msg += f"🕒 *Franja Alerta:* `{franja_actual}`\n"
-        msg += "───────────────\n"
-        msg += obtener_resumen_estadisticas()
+        msg += f"🕒 Franja: `{franja_actual}`\n"
+        msg += f"🔗 [Gráfica en Binance](https://www.binance.com/en/futures/{symbol})"
 
         print(msg) 
         send_telegram_alert(msg)
@@ -202,11 +227,17 @@ def ciclo():
 
 
 if __name__ == "__main__":
-    send_telegram_alert("🤖 *Bot de Escaneo Iniciado con Contador VET*")
+    send_telegram_alert("🤖 *Bot de Escaneo Iniciado con Reportes Programados VET*")
     while True:
         try:
+            # 1. Escanear el mercado
             ciclo()
+            
+            # 2. Verificar si toca enviar el reporte de resumen (1 minuto antes de cambiar de franja)
+            verificar_envio_reporte_programado()
+            
         except Exception as e:
             print(f"FATAL: {e}")
             traceback.print_exc()
+            
         time.sleep(SLEEP_CICLO)
