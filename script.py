@@ -35,6 +35,9 @@ alert_stats = defaultdict(int)
 # Variable para evitar envíos duplicados en el mismo minuto de cierre
 _ultimo_reporte_enviado = ""
 
+# Fecha del último reinicio diario de estadísticas
+_ultimo_reset_diario = ""
+
 client = Client(BINANCE_API_KEY, BINANCE_API_SECRET)
 http = requests.Session()
 
@@ -109,6 +112,22 @@ def verificar_envio_reporte_programado():
             print(f"\n[PROGRAMADOR] Enviando reporte de cierre de bloque VET ({clave_minuto})...")
             send_telegram_alert(msg_reporte)
             _ultimo_reporte_enviado = clave_minuto
+
+            # Si es el último reporte del día (23:59), reiniciar todos los contadores
+            if now_vet.hour == 23:
+                alert_stats.clear()
+                _ultimo_reset_diario = now_vet.strftime("%Y-%m-%d")
+                print("[RESET] Contadores de estadísticas reiniciados (nuevo día VET).")
+
+    # Respaldo: si el bot se reinició y perdió el reporte de las 23:59,
+    # también reiniciar al cruzar la medianoche.
+    ahora_vet = datetime.now(VET_TIMEZONE)
+    hoy = ahora_vet.strftime("%Y-%m-%d")
+    if ahora_vet.hour == 0 and _ultimo_reset_diario != hoy:
+        if alert_stats:
+            print("[RESET] Contadores reiniciados por cambio de día (respaldo medianoche).")
+        alert_stats.clear()
+        _ultimo_reset_diario = hoy
 
 
 # ====== Funciones del Bot y Red ======
